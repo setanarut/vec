@@ -2,10 +2,7 @@ package vec
 
 import (
 	"fmt"
-	"image"
 	"math"
-
-	"golang.org/x/image/math/fixed"
 )
 
 type Vec2 struct {
@@ -116,25 +113,20 @@ func (v Vec2) LengthSq() float64 {
 	return v.Dot(v)
 }
 
-// Length returns the length of this vector
-func (v Vec2) Length() float64 {
+// Mag returns the magnitude of this vector
+func (v Vec2) Mag() float64 {
 	return math.Sqrt(v.Dot(v))
 }
 
-// Lerp linearly interpolates between this and other vector.
-func (v Vec2) Lerp(other Vec2, t float64) Vec2 {
-	return v.Scale(1.0 - t).Add(other.Scale(t))
-}
-
-// Normalize returns a normalized copy of this vector.
-func (v Vec2) Normalize() Vec2 {
+// Unit returns a normalized copy of this vector (unit vector).
+func (v Vec2) Unit() Vec2 {
 	// return v.Mult(1.0 / (v.Length() + math.SmallestNonzeroFloat64))
-	return v.Scale(1.0 / (v.Length() + 1e-50))
+	return v.Scale(1.0 / (v.Mag() + 1e-50))
 }
 
 // Spherical linearly interpolate between this and other.
 func (v Vec2) LerpSpherical(other Vec2, t float64) Vec2 {
-	dot := v.Normalize().Dot(other.Normalize())
+	dot := v.Unit().Dot(other.Unit())
 	omega := math.Acos(clamp(dot, -1, 1))
 
 	if omega < 1e-3 {
@@ -147,22 +139,27 @@ func (v Vec2) LerpSpherical(other Vec2, t float64) Vec2 {
 
 // Spherical linearly interpolate between this towards other by no more than angle a radians.
 func (v Vec2) LerpSphericalClamp(other Vec2, angle float64) Vec2 {
-	dot := v.Normalize().Dot(other.Normalize())
+	dot := v.Unit().Dot(other.Unit())
 	omega := math.Acos(clamp(dot, -1, 1))
 	return v.LerpSpherical(other, math.Min(angle, omega)/omega)
 }
 
-// ClampLenght clamps this vector lenght to len.
-func (v Vec2) ClampLenght(len float64) Vec2 {
-	if v.Dot(v) > len*len {
-		return v.Normalize().Scale(len)
+// ClampMag clamps this vector magnitude to m.
+func (v Vec2) ClampMag(m float64) Vec2 {
+	if v.Dot(v) > m*m {
+		return v.Unit().Scale(m)
 	}
 	return Vec2{v.X, v.Y}
 }
 
+// Lerp linearly interpolates between this and other vector.
+func (v Vec2) Lerp(other Vec2, t float64) Vec2 {
+	return v.Scale(1.0 - t).Add(other.Scale(t))
+}
+
 // LerpDistance linearly interpolates between this towards other by distance dist.
 func (v Vec2) LerpDistance(other Vec2, dist float64) Vec2 {
-	return v.Add(other.Sub(v).ClampLenght(dist))
+	return v.Add(other.Sub(v).ClampMag(dist))
 }
 
 // Returns the distance between this and other.
@@ -178,40 +175,9 @@ func (v Vec2) DistanceSq(other Vec2) float64 {
 	return v.Sub(other).LengthSq()
 }
 
-// Near returns true if the distance between this and other is less than dist.
-func (v Vec2) Near(other Vec2, dist float64) bool {
+// IsNear returns true if the distance between this and other is less than dist.
+func (v Vec2) IsNear(other Vec2, dist float64) bool {
 	return v.DistanceSq(other) < dist*dist
-}
-
-// Collision related below
-
-func (v Vec2) PointGreater(b, c Vec2) bool {
-	return (b.Y-v.Y)*(v.X+b.X-2*c.X) > (b.X-v.X)*(v.Y+b.Y-2*c.Y)
-}
-
-func (v Vec2) CheckAxis(v1, p, n Vec2) bool {
-	return p.Dot(n) <= math.Max(v.Dot(n), v1.Dot(n))
-}
-
-func (v Vec2) ClosestT(b Vec2) float64 {
-	delta := b.Sub(v)
-
-	return -clamp(delta.Dot(v.Add(b))/delta.LengthSq(), -1.0, 1.0)
-}
-
-func (v Vec2) LerpT(b Vec2, t float64) Vec2 {
-	ht := 0.5 * t
-	return v.Scale(0.5 - ht).Add(b.Scale(0.5 + ht))
-}
-
-func (v Vec2) ClosestDist(v1 Vec2) float64 {
-	return v.LerpT(v1, v.ClosestT(v1)).LengthSq()
-}
-
-func (v Vec2) ClosestPointOnSegment(a, b Vec2) Vec2 {
-	delta := a.Sub(b)
-	t := clamp01(delta.Dot(v.Sub(b)) / delta.LengthSq())
-	return b.Add(delta.Scale(t))
 }
 
 // Round returns the nearest integer Vector, rounding half away from zero.
@@ -224,25 +190,11 @@ func (v Vec2) Floor() Vec2 {
 	return Vec2{math.Floor(v.X), math.Floor(v.Y)}
 }
 
-// Point returns Vec2 as image.Point
-func (v Vec2) Point() image.Point {
-	return image.Point{int(v.X), int(v.Y)}
-}
-
-// FlipVertical inverts position Y axis beetween bottom-left and top-left coordinate systems
-func (v Vec2) FlipVertical(screenbHeight float64) Vec2 {
-	return Vec2{v.X, screenbHeight - v.Y}
-}
-
 // ForAngle returns the unit length vector for the given angle (in radians).
 func ForAngle(a float64) Vec2 {
 	return Vec2{math.Cos(a), math.Sin(a)}
 }
 
-// FromPoint converts image.Point to Vec2
-func FromPoint(p image.Point) Vec2 {
-	return Vec2{float64(p.X), float64(p.Y)}
-}
 func clamp(f, min, max float64) float64 {
 	if f > min {
 		return math.Min(f, max)
@@ -253,16 +205,4 @@ func clamp(f, min, max float64) float64 {
 
 func clamp01(f float64) float64 {
 	return math.Max(0, math.Min(f, 1))
-}
-
-func ToFixed(v Vec2) fixed.Point26_6 {
-	return fixed.Point26_6{X: fixed.Int26_6(v.X * 64), Y: fixed.Int26_6(v.Y * 64)}
-}
-
-// RotateAbout rotates point about origin
-func RotateAbout(point Vec2, angle float64, origin Vec2) Vec2 {
-	b := Vec2{}
-	b.X = math.Cos(angle)*(point.X-origin.X) - math.Sin(angle)*(point.Y-origin.Y) + origin.X
-	b.Y = math.Sin(angle)*(point.X-origin.X) + math.Cos(angle)*(point.Y-origin.Y) + origin.Y
-	return b
 }
