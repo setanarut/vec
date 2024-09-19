@@ -24,7 +24,7 @@ func (v Vec2) Add(other Vec2) Vec2 {
 	return Vec2{v.X + other.X, v.Y + other.Y}
 }
 
-// DivScalar divide
+// Div divides
 func (v Vec2) Div(number float64) Vec2 {
 	return Vec2{v.X / number, v.Y / number}
 }
